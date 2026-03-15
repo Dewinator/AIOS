@@ -3,10 +3,6 @@
 
 package dev.aios.shell.broker
 
-/// Simple keyword-based Intent Parser for MVP.
-/// In production, this will be replaced by a local AI model (Gemma/Phi).
-/// Think of it like NLU (Natural Language Understanding).
-
 data class ParsedIntent(
     val toolId: String,
     val parameters: Map<String, Any>,
@@ -16,13 +12,13 @@ data class ParsedIntent(
 
 class IntentParser {
 
-    /// Parse natural language input into a tool call intent.
     fun parse(input: String): ParsedIntent? {
-        val lower = input.lowercase().trim()
+        // Normalize: lowercase + replace umlauts so both "stören" and "storen" match
+        val lower = normalize(input)
 
         return when {
             // Focus mode / Do Not Disturb
-            lower.containsAny("nicht stören", "fokus", "ruhe", "do not disturb", "dnd", "focus") -> {
+            lower.containsAny("nicht stor", "fokus", "ruhe", "do not disturb", "dnd", "focus", "stille", "stumm") -> {
                 val disable = lower.containsAny("aus", "deaktiv", "off", "stopp", "beende")
                 val until = extractTime(lower)
                 ParsedIntent(
@@ -32,25 +28,25 @@ class IntentParser {
                         if (until != null) put("until", until)
                     },
                     confidence = 0.9f,
-                    explanation = if (disable) "Nicht stören deaktivieren" else "Nicht stören aktivieren" +
-                        if (until != null) " bis $until" else "",
+                    explanation = if (disable) "Nicht storen deaktivieren"
+                        else "Nicht storen aktivieren" + if (until != null) " bis $until" else "",
                 )
             }
 
             // Brightness
-            lower.containsAny("helligkeit", "brightness", "bildschirm hell", "display") -> {
-                val level = extractNumber(lower) ?: 50
+            lower.containsAny("helligkeit", "brightness", "bildschirm hell", "display", "hell", "dunkel") -> {
+                val level = extractNumber(lower) ?: if (lower.contains("dunkel")) 20 else 50
                 ParsedIntent(
                     toolId = "system.settings.control_brightness",
                     parameters = mapOf("level" to level),
                     confidence = 0.85f,
-                    explanation = "Helligkeit auf $level% setzen",
+                    explanation = "Helligkeit auf ${level}% setzen",
                 )
             }
 
             // Calendar
-            lower.containsAny("termin", "kalender", "calendar", "meeting", "event") -> {
-                val title = extractAfter(lower, listOf("termin", "meeting", "event"))
+            lower.containsAny("termin", "kalender", "calendar", "meeting", "event", "erinnerung") -> {
+                val title = extractAfter(lower, listOf("termin ", "meeting ", "event "))
                     ?: "Neuer Termin"
                 ParsedIntent(
                     toolId = "system.calendar.create_event",
@@ -60,35 +56,46 @@ class IntentParser {
                         "end_time" to "2026-03-16T11:00:00",
                     ),
                     confidence = 0.7f,
-                    explanation = "Termin '$title' erstellen",
+                    explanation = "Termin '${title}' erstellen",
                 )
             }
 
             // Messages
-            lower.containsAny("nachricht", "schreib", "sende", "schick", "message", "sms") -> {
-                val recipient = extractAfter(lower, listOf("an", "für", "to")) ?: "Unbekannt"
-                val body = extractAfter(lower, listOf("dass", ":", "nachricht")) ?: input
+            lower.containsAny("nachricht", "schreib", "sende", "schick", "message", "sms", "text") -> {
+                val recipient = extractAfter(lower, listOf("an ", "fur ", "fuer ", "to ")) ?: "Unbekannt"
+                val body = extractAfter(lower, listOf("dass ", ": ", "nachricht ")) ?: input
                 ParsedIntent(
                     toolId = "system.messages.send",
                     parameters = mapOf("recipient" to recipient, "body" to body),
                     confidence = 0.75f,
-                    explanation = "Nachricht an $recipient senden",
+                    explanation = "Nachricht an ${recipient} senden",
                 )
             }
 
             // File reading
-            lower.containsAny("datei", "lese", "öffne", "file", "dokument") -> {
-                val path = extractAfter(lower, listOf("datei", "file", "dokument")) ?: "unknown"
+            lower.containsAny("datei", "lese", "offne", "file", "dokument", "zeig") -> {
+                val path = extractAfter(lower, listOf("datei ", "file ", "dokument ")) ?: "unknown"
                 ParsedIntent(
                     toolId = "system.files.read",
                     parameters = mapOf("path" to path, "scope" to "documents"),
                     confidence = 0.7f,
-                    explanation = "Datei '$path' lesen",
+                    explanation = "Datei '${path}' lesen",
                 )
             }
 
             else -> null
         }
+    }
+
+    // Normalize input: lowercase + flatten umlauts
+    private fun normalize(input: String): String {
+        return input.lowercase()
+            .replace("ae", "a").replace("oe", "o").replace("ue", "u")  // already ASCII umlauts
+            .replace("\u00e4", "a")   // ae
+            .replace("\u00f6", "o")   // oe
+            .replace("\u00fc", "u")   // ue
+            .replace("\u00df", "ss")  // ss
+            .trim()
     }
 
     private fun String.containsAny(vararg keywords: String): Boolean =
