@@ -9,6 +9,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.aios.shell.ai.AIManager
 import dev.aios.shell.ai.AIResponse
+import dev.aios.shell.ai.DownloadState
+import dev.aios.shell.ai.DownloadableModel
+import dev.aios.shell.ai.ModelDownloader
 import dev.aios.shell.broker.*
 import dev.aios.shell.planner.TaskPlanner
 import dev.aios.shell.planner.TaskPlan
@@ -79,6 +82,16 @@ class ShellViewModel(context: Context) : ViewModel() {
     private val intentParser = IntentParser()
     private val taskPlanner = TaskPlanner()
     private val aiManager = AIManager(context)
+    private val modelDownloader = ModelDownloader(context)
+
+    private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
+    val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
+
+    private val _downloadedModelIds = MutableStateFlow<Set<String>>(emptySet())
+    val downloadedModelIds: StateFlow<Set<String>> = _downloadedModelIds.asStateFlow()
+
+    private val _activeModelId = MutableStateFlow<String?>(null)
+    val activeModelId: StateFlow<String?> = _activeModelId.asStateFlow()
 
     private val _uiState = MutableStateFlow(ShellUiState(
         messages = listOf(
@@ -95,6 +108,11 @@ class ShellViewModel(context: Context) : ViewModel() {
 
     init {
         _uiState.update { it.copy(toolCount = toolBroker.availableTools().size) }
+
+        // Scan for already downloaded models
+        viewModelScope.launch(Dispatchers.IO) {
+            refreshDownloadedModels()
+        }
 
         // Initialize AI backends in background
         viewModelScope.launch(Dispatchers.IO) {
@@ -493,10 +511,64 @@ class ShellViewModel(context: Context) : ViewModel() {
         }
     }
 
-    fun configureLocalModel(modelName: String) {
+    fun downloadModel(model: DownloadableModel) {
         viewModelScope.launch(Dispatchers.IO) {
-            aiManager.configureLocalModel(modelName)
+            _downloadState.value = DownloadState.Downloading(0f, 0, model.sizeBytes)
+
+            modelDownloader.downloadModel(model) { state ->
+                _downloadState.value = state
+            }
+
+            // Nach Download die Liste aktualisieren
+            refreshDownloadedModels()
+
+            // Wenn erfolgreich und kein Modell aktiv: automatisch aktivieren
+            if (_downloadState.value is DownloadState.Completed && _activeModelId.value == null) {
+                selectModel(model)
+            }
         }
+    }
+
+    fun cancelDownload() {
+        modelDownloader.cancelDownload()
+    }
+
+    fun deleteModel(model: DownloadableModel) {
+        viewModelScope.launch(Dispatchers.IO) {
+            modelDownloader.deleteModel(model)
+            if (_activeModelId.value == model.id) {
+                _activeModelId.value = null
+                aiManager.configureLocalModel("")
+            }
+            refreshDownloadedModels()
+        }
+    }
+
+    fun selectModel(model: DownloadableModel) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _activeModelId.value = model.id
+            aiManager.configureLocalModel(model.fileName)
+
+            // UI-Status aktualisieren
+            val backends = aiManager.getAvailableBackends()
+            val anyAvailable = backends.any { it.available }
+            _uiState.update { it.copy(aiAvailable = anyAvailable) }
+
+            if (anyAvailable) {
+                withContext(Dispatchers.Main) {
+                    addMessage(ChatMessage(
+                        text = "Lokales Modell geladen: ${model.name}",
+                        isUser = false,
+                        type = MessageType.AI_THINKING,
+                    ))
+                }
+            }
+        }
+    }
+
+    private fun refreshDownloadedModels() {
+        val downloaded = modelDownloader.getDownloadedModels()
+        _downloadedModelIds.value = downloaded.map { it.id }.toSet()
     }
 
     fun updateSetting(key: String, value: Any) {

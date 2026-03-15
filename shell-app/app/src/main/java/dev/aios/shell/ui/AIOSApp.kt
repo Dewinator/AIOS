@@ -94,15 +94,29 @@ fun AIOSApp(
             }
         }
         Screen.SETTINGS -> {
+            val downloadState by viewModel.downloadState.collectAsState()
+            val downloadedModelIds by viewModel.downloadedModelIds.collectAsState()
+            val activeModelId by viewModel.activeModelId.collectAsState()
+
             SettingsScreen(
+                downloadState = downloadState,
+                downloadedModelIds = downloadedModelIds,
+                activeModelId = activeModelId,
                 onBackendChanged = { type ->
                     viewModel.setPreferredBackend(type)
                 },
                 onApiConfigured = { type, key, model, url ->
                     viewModel.configureExternalAPI(type, key, model, url)
                 },
-                onLocalModelSelected = { modelName ->
-                    viewModel.configureLocalModel(modelName)
+                onDownloadModel = { model ->
+                    viewModel.downloadModel(model)
+                },
+                onCancelDownload = { viewModel.cancelDownload() },
+                onDeleteModel = { model ->
+                    viewModel.deleteModel(model)
+                },
+                onSelectModel = { model ->
+                    viewModel.selectModel(model)
                 },
                 onSettingChanged = { key, value ->
                     viewModel.updateSetting(key, value)

@@ -162,6 +162,16 @@ class AIManager(private val context: Context) {
         config.localModelFilename = modelPath
         llamaEngine.setModelFilename(modelPath)
         Log.i(TAG, "Lokales Modell konfiguriert: $modelPath")
+
+        // Modell direkt laden wenn ein Pfad gesetzt wurde
+        if (modelPath.isNotBlank()) {
+            // Vorheriges Modell freigeben
+            if (llamaEngine.isAvailable) {
+                llamaEngine.shutdown()
+            }
+            val loaded = llamaEngine.initialize()
+            Log.i(TAG, "Lokales Modell geladen: $loaded")
+        }
     }
 
     /**

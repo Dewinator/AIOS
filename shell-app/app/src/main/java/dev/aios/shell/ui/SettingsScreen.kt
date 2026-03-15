@@ -25,6 +25,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.aios.shell.ai.BackendType
+import dev.aios.shell.ai.DownloadState
+import dev.aios.shell.ai.DownloadableModel
+import dev.aios.shell.ai.ModelDownloader
 import kotlin.math.roundToInt
 
 // Colors (shared with AIOSApp)
@@ -47,18 +50,7 @@ private fun BackendType.label(): String = when (this) {
     BackendType.REMOTE_SERVER -> "Remote Server"
 }
 
-private data class LocalModel(
-    val id: String,
-    val name: String,
-    val size: String,
-)
-
-private val availableModels = listOf(
-    LocalModel("qwen2.5-3b", "Qwen 2.5 3B (Empfohlen)", "~2 GB"),
-    LocalModel("gemma2-2b", "Gemma 2 2B", "~1.5 GB"),
-    LocalModel("phi3.5-mini", "Phi 3.5 Mini 3.8B", "~2.2 GB"),
-    LocalModel("tinyllama-1.1b", "TinyLlama 1.1B (Schnell)", "~600 MB"),
-)
+private val availableModels = ModelDownloader.AVAILABLE_MODELS
 
 private enum class ApiProvider(val label: String, val defaultModel: String) {
     CLAUDE("Claude (Anthropic)", "claude-sonnet-4-20250514"),
@@ -72,20 +64,22 @@ private val contextSizeOptions = listOf(512, 1024, 2048, 4096)
 @Composable
 fun SettingsScreen(
     initialBackendType: BackendType = BackendType.LOCAL,
+    downloadState: DownloadState = DownloadState.Idle,
+    downloadedModelIds: Set<String> = emptySet(),
+    activeModelId: String? = null,
     onBackendChanged: (type: BackendType) -> Unit = {},
     onApiConfigured: (type: String, key: String, model: String, url: String?) -> Unit = { _, _, _, _ -> },
-    onLocalModelSelected: (modelName: String) -> Unit = {},
+    onDownloadModel: (DownloadableModel) -> Unit = {},
+    onCancelDownload: () -> Unit = {},
+    onDeleteModel: (DownloadableModel) -> Unit = {},
+    onSelectModel: (DownloadableModel) -> Unit = {},
     onSettingChanged: (key: String, value: Any) -> Unit = { _, _ -> },
     onBack: () -> Unit = {},
 ) {
     var selectedBackend by remember { mutableStateOf(initialBackendType) }
 
     // Local model state
-    var loadedModelName by remember { mutableStateOf("Kein Modell geladen") }
-    var loadedModelSize by remember { mutableStateOf("--") }
-    var selectedDownloadModel by remember { mutableStateOf<LocalModel?>(null) }
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var selectedDownloadModel by remember { mutableStateOf<DownloadableModel?>(null) }
     var threadCount by remember { mutableFloatStateOf(4f) }
     var selectedContextSize by remember { mutableIntStateOf(2048) }
     var showModelDropdown by remember { mutableStateOf(false) }
@@ -155,8 +149,8 @@ fun SettingsScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             BackendType.entries.forEach { backend ->
                                 val status = when (backend) {
-                                    BackendType.LOCAL -> if (loadedModelName != "Kein Modell geladen")
-                                        "verfuegbar" else "nicht verfuegbar"
+                                    BackendType.LOCAL -> if (downloadedModelIds.isNotEmpty() && activeModelId != null)
+                                        "verfuegbar" else if (downloadedModelIds.isNotEmpty()) "Modell waehlen" else "nicht verfuegbar"
                                     BackendType.EXTERNAL_API -> if (apiKey.isNotBlank())
                                         "verfuegbar" else "nicht verfuegbar"
                                     BackendType.REMOTE_SERVER -> "nicht verfuegbar"
@@ -210,43 +204,63 @@ fun SettingsScreen(
                         SectionHeader("Lokales Modell")
                     }
 
+                    // Heruntergeladene Modelle anzeigen
+                    if (downloadedModelIds.isNotEmpty()) {
+                        item {
+                            SettingsCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "Installierte Modelle",
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    availableModels.filter { it.id in downloadedModelIds }.forEach { model ->
+                                        val isActive = model.id == activeModelId
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (isActive) AvatarBlue.copy(alpha = 0.15f) else CardBgLight.copy(alpha = 0.5f),
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { onSelectModel(model) }
+                                                    .padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = model.name,
+                                                        color = TextPrimary,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                    )
+                                                    Text(
+                                                        text = if (isActive) "Aktiv — ${model.sizeLabel}" else model.sizeLabel,
+                                                        color = if (isActive) AvatarGreen else TextMuted,
+                                                        fontSize = 11.sp,
+                                                    )
+                                                }
+                                                if (!isActive) {
+                                                    TextButton(onClick = { onDeleteModel(model) }) {
+                                                        Text(
+                                                            text = "Loeschen",
+                                                            color = AvatarAmber,
+                                                            fontSize = 11.sp,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         SettingsCard {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                // Current model info
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "Geladenes Modell",
-                                            color = TextMuted,
-                                            fontSize = 11.sp,
-                                        )
-                                        Text(
-                                            text = loadedModelName,
-                                            color = TextPrimary,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                        )
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "Groesse",
-                                            color = TextMuted,
-                                            fontSize = 11.sp,
-                                        )
-                                        Text(
-                                            text = loadedModelSize,
-                                            color = TextSecondary,
-                                            fontSize = 14.sp,
-                                        )
-                                    }
-                                }
-
-                                HorizontalDivider(color = CardBgLight, thickness = 1.dp)
-
                                 // Model selection dropdown
                                 Text(
                                     text = "Modell herunterladen",
@@ -267,7 +281,7 @@ fun SettingsScreen(
                                     ) {
                                         Text(
                                             text = selectedDownloadModel?.let {
-                                                "${it.name} (${it.size})"
+                                                "${it.name} (${it.sizeLabel})"
                                             } ?: "Modell auswaehlen...",
                                             modifier = Modifier.weight(1f),
                                             fontSize = 13.sp,
@@ -286,21 +300,33 @@ fun SettingsScreen(
                                         modifier = Modifier.background(CardBg),
                                     ) {
                                         availableModels.forEach { model ->
+                                            val isDownloaded = model.id in downloadedModelIds
                                             DropdownMenuItem(
                                                 text = {
                                                     Column {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(
+                                                                text = model.name,
+                                                                color = if (isDownloaded) TextMuted else TextPrimary,
+                                                                fontSize = 13.sp,
+                                                            )
+                                                            if (isDownloaded) {
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text(
+                                                                    text = "installiert",
+                                                                    color = AvatarGreen,
+                                                                    fontSize = 10.sp,
+                                                                )
+                                                            }
+                                                        }
                                                         Text(
-                                                            text = model.name,
-                                                            color = TextPrimary,
-                                                            fontSize = 13.sp,
-                                                        )
-                                                        Text(
-                                                            text = model.size,
+                                                            text = "${model.sizeLabel} — ${model.description}",
                                                             color = TextMuted,
                                                             fontSize = 11.sp,
                                                         )
                                                     }
                                                 },
+                                                enabled = !isDownloaded,
                                                 onClick = {
                                                     selectedDownloadModel = model
                                                     showModelDropdown = false
@@ -310,16 +336,17 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                // Download button + progress
+                                val isDownloading = downloadState is DownloadState.Downloading
+
+                                // Download button
                                 Button(
                                     onClick = {
                                         selectedDownloadModel?.let { model ->
-                                            isDownloading = true
-                                            downloadProgress = 0f
-                                            onLocalModelSelected(model.id)
+                                            onDownloadModel(model)
                                         }
                                     },
-                                    enabled = selectedDownloadModel != null && !isDownloading,
+                                    enabled = selectedDownloadModel != null && !isDownloading &&
+                                        selectedDownloadModel?.id !in downloadedModelIds,
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
@@ -328,15 +355,17 @@ fun SettingsScreen(
                                     ),
                                 ) {
                                     Text(
-                                        text = if (isDownloading) "Wird heruntergeladen..." else "Modell herunterladen",
+                                        text = if (isDownloading) "Wird heruntergeladen..." else "Herunterladen",
                                         fontSize = 14.sp,
                                     )
                                 }
 
+                                // Download progress
                                 if (isDownloading) {
+                                    val dlState = downloadState as DownloadState.Downloading
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         LinearProgressIndicator(
-                                            progress = { downloadProgress },
+                                            progress = { dlState.progress },
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(6.dp)
@@ -344,12 +373,42 @@ fun SettingsScreen(
                                             color = AvatarBlue,
                                             trackColor = CardBgLight,
                                         )
-                                        Text(
-                                            text = "${(downloadProgress * 100).roundToInt()}%",
-                                            color = TextMuted,
-                                            fontSize = 11.sp,
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Text(
+                                                text = "${(dlState.progress * 100).roundToInt()}%",
+                                                color = TextMuted,
+                                                fontSize = 11.sp,
+                                            )
+                                            Text(
+                                                text = "${dlState.downloadedBytes / 1024 / 1024} / ${dlState.totalBytes / 1024 / 1024} MB",
+                                                color = TextMuted,
+                                                fontSize = 11.sp,
+                                            )
+                                        }
+                                        TextButton(onClick = onCancelDownload) {
+                                            Text("Abbrechen", color = AvatarAmber, fontSize = 12.sp)
+                                        }
                                     }
+                                }
+
+                                // Download result message
+                                if (downloadState is DownloadState.Failed) {
+                                    Text(
+                                        text = "Fehler: ${downloadState.error}",
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 12.sp,
+                                    )
+                                }
+
+                                if (downloadState is DownloadState.Completed) {
+                                    Text(
+                                        text = "Download abgeschlossen!",
+                                        color = AvatarGreen,
+                                        fontSize = 12.sp,
+                                    )
                                 }
 
                                 HorizontalDivider(color = CardBgLight, thickness = 1.dp)
