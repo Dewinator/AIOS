@@ -1,0 +1,20 @@
+[package]
+name = "aios-broker"
+version = "0.1.0"
+edition = "2021"
+description = "AIOS Tool Broker — the bridge between AI agents and system functions"
+license = "Apache-2.0"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+jsonschema = "0.18"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+
+[dev-dependencies]
+tokio-test = "0.4"

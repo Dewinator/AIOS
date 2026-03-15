@@ -1,0 +1,53 @@
+{
+  "$schema": "https://aios.dev/schemas/tool/v1",
+  "id": "system.files.read",
+  "name": "Read File",
+  "description": "Reads the content of a file within the user's scoped document directories.",
+  "version": "0.1.0",
+  "category": "files",
+  "input": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Relative path within the allowed scope (e.g., Documents/notes/meeting.txt)"
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["documents", "downloads", "pictures", "media"],
+        "description": "The scoped directory to read from"
+      }
+    },
+    "required": ["path", "scope"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "content": {
+        "type": "string",
+        "description": "The file content"
+      },
+      "mime_type": {
+        "type": "string",
+        "description": "Detected MIME type"
+      },
+      "size_bytes": {
+        "type": "integer",
+        "description": "File size in bytes"
+      }
+    }
+  },
+  "capabilities": ["files.user_documents.read"],
+  "risk_class": "low",
+  "side_effects": [],
+  "rollback": {
+    "supported": false,
+    "method": "n/a"
+  },
+  "audit": {
+    "log_input": true,
+    "log_output": false,
+    "retention_days": 30
+  },
+  "consent_level": "none"
+}

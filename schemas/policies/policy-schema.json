@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIOS Policy Schema",
+  "description": "Schema for validating AIOS policy configuration files",
+  "type": "object",
+  "required": ["version", "name", "defaults", "rules"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Policy schema version"
+    },
+    "name": {
+      "type": "string",
+      "description": "Policy name"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description"
+    },
+    "defaults": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["allow", "allow-with-log", "require-confirmation", "deny", "quarantine"]
+        },
+        "log_all_decisions": {
+          "type": "boolean"
+        },
+        "max_tool_chain_length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_retries_per_tool": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "match", "decision"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "match": {
+            "type": "object",
+            "properties": {
+              "risk_class": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "critical"]
+              },
+              "side_effects": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "capabilities_include": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "destination": {
+                "type": "string",
+                "enum": ["trusted", "untrusted"]
+              },
+              "domain": {
+                "type": "string"
+              }
+            }
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["allow", "allow-with-log", "require-confirmation", "deny", "quarantine"]
+          },
+          "consent": {
+            "type": "string",
+            "enum": ["none", "once", "persistent", "strong", "biometric"]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "context_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "match", "override"],
+        "properties": {
+          "name": { "type": "string" },
+          "match": { "type": "object" },
+          "override": { "type": "object" }
+        }
+      }
+    },
+    "agent_limits": {
+      "type": "object",
+      "properties": {
+        "max_actions_per_minute": { "type": "integer" },
+        "max_actions_per_session": { "type": "integer" },
+        "max_concurrent_tools": { "type": "integer" },
+        "loop_detection_threshold": { "type": "integer" },
+        "idle_timeout_seconds": { "type": "integer" }
+      }
+    }
+  }
+}

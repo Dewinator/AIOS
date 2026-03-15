@@ -1,0 +1,38 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+.idea/
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Environment
+.env
+*.local
+
+# Models (too large for git)
+models/
+*.gguf
+*.onnx
+*.bin

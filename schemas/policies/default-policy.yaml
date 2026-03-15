@@ -1,0 +1,96 @@
+# AIOS Default Policy Configuration
+# This policy defines the default behavior for the Policy Engine.
+# Principle: deny-by-default — only explicitly allowed actions are permitted.
+
+version: "1.0"
+name: "default"
+description: "Default deny-by-default policy for AIOS agent actions"
+
+# Global defaults
+defaults:
+  decision: deny
+  log_all_decisions: true
+  max_tool_chain_length: 10
+  max_retries_per_tool: 3
+
+# Risk-based rules (evaluated in order, first match wins)
+rules:
+  # Low-risk, read-only local actions — allow silently
+  - name: "allow-low-risk-local"
+    match:
+      risk_class: low
+      side_effects: []
+    decision: allow
+    consent: none
+
+  # Low-risk with minor side effects — allow with log
+  - name: "allow-low-risk-with-effects"
+    match:
+      risk_class: low
+    decision: allow-with-log
+    consent: none
+
+  # Medium-risk actions — require one-time confirmation
+  - name: "confirm-medium-risk"
+    match:
+      risk_class: medium
+    decision: require-confirmation
+    consent: once
+
+  # High-risk actions — always require strong confirmation
+  - name: "confirm-high-risk"
+    match:
+      risk_class: high
+    decision: require-confirmation
+    consent: strong
+
+  # Critical actions — require biometric confirmation
+  - name: "confirm-critical"
+    match:
+      risk_class: critical
+    decision: require-confirmation
+    consent: biometric
+
+  # Block sensitive data to untrusted destinations
+  - name: "block-sensitive-exfiltration"
+    match:
+      capabilities_include: ["files.*.read", "contacts.*.read", "messages.*.read"]
+      destination: untrusted
+    decision: deny
+    reason: "sensitive_source + untrusted_destination"
+
+  # Block all network access to unapproved domains
+  - name: "block-unapproved-network"
+    match:
+      capabilities_include: ["network.http.*"]
+      domain: unapproved
+    decision: deny
+    reason: "network access to unapproved domain"
+
+# Context-dependent overrides
+context_rules:
+  # When device is locked, restrict to minimal actions
+  - name: "locked-device-restrictions"
+    match:
+      device_state: locked
+    override:
+      max_risk_class: low
+      decision: deny
+      reason: "device is locked"
+
+  # On roaming, block non-essential network actions
+  - name: "roaming-restrictions"
+    match:
+      network_state: roaming
+    override:
+      capabilities_block: ["network.http.*"]
+      decision: deny
+      reason: "device is roaming"
+
+# Agent behavior limits
+agent_limits:
+  max_actions_per_minute: 30
+  max_actions_per_session: 200
+  max_concurrent_tools: 3
+  loop_detection_threshold: 5
+  idle_timeout_seconds: 300

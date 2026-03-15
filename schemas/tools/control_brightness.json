@@ -1,0 +1,50 @@
+{
+  "$schema": "https://aios.dev/schemas/tool/v1",
+  "id": "system.settings.control_brightness",
+  "name": "Control Brightness",
+  "description": "Sets the screen brightness level or enables/disables auto-brightness.",
+  "version": "0.1.0",
+  "category": "settings",
+  "input": {
+    "type": "object",
+    "properties": {
+      "level": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Brightness level as percentage (0-100)"
+      },
+      "auto": {
+        "type": "boolean",
+        "description": "Enable or disable auto-brightness"
+      }
+    },
+    "required": []
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "current_level": {
+        "type": "integer",
+        "description": "Current brightness level after change"
+      },
+      "auto_enabled": {
+        "type": "boolean",
+        "description": "Whether auto-brightness is active"
+      }
+    }
+  },
+  "capabilities": ["settings.display.modify"],
+  "risk_class": "low",
+  "side_effects": ["modifies_display_settings"],
+  "rollback": {
+    "supported": true,
+    "method": "Restore previous brightness level"
+  },
+  "audit": {
+    "log_input": true,
+    "log_output": true,
+    "retention_days": 7
+  },
+  "consent_level": "none"
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://aios.dev/schemas/tool/v1",
+  "id": "system.messages.send",
+  "name": "Send Message",
+  "description": "Sends a text message (SMS or messaging app) to a specified contact.",
+  "version": "0.1.0",
+  "category": "messages",
+  "input": {
+    "type": "object",
+    "properties": {
+      "recipient": {
+        "type": "string",
+        "description": "Contact name or phone number"
+      },
+      "body": {
+        "type": "string",
+        "description": "Message text content"
+      },
+      "channel": {
+        "type": "string",
+        "enum": ["sms", "default_messaging_app"],
+        "description": "Which messaging channel to use"
+      },
+      "attachment_path": {
+        "type": "string",
+        "description": "Optional path to a file attachment (scoped)"
+      }
+    },
+    "required": ["recipient", "body"]
+  },
+  "output": {
+    "type": "object",
+    "properties": {
+      "message_id": {
+        "type": "string",
+        "description": "ID of the sent message"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["sent", "queued", "failed"],
+        "description": "Delivery status"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "When the message was sent"
+      }
+    }
+  },
+  "capabilities": ["messages.sms.send", "contacts.list.read"],
+  "risk_class": "high",
+  "side_effects": ["sends_external_communication"],
+  "rollback": {
+    "supported": false,
+    "method": "n/a"
+  },
+  "audit": {
+    "log_input": true,
+    "log_output": true,
+    "retention_days": 90
+  },
+  "consent_level": "strong"
+}
